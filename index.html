@@ -186,6 +186,8 @@ footer{background:#050505;border-top:2px solid var(--red);padding:44px 0;text-al
 .item{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--red);border-radius:10px;padding:14px 16px;margin:10px 0;display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
 .item p{width:100%;color:var(--mute);margin:0}
 .item small{color:var(--mute)}
+.nom-in{background:#0b0b0b;border:1px solid var(--line);border-radius:8px;color:var(--text,#f2f2f2);padding:8px 10px;font:600 15px Inter,sans-serif;min-width:150px;max-width:100%}
+.nom-in:focus{outline:2px solid var(--red);outline-offset:1px}
 #espace h3,#admin h3{font-size:26px;margin:36px 0 8px;color:var(--red2)}
 .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
 .pgrid figure{position:relative}.pgrid img{width:100%;height:180px;object-fit:cover;border-radius:10px;cursor:zoom-in}
@@ -686,7 +688,7 @@ async function loadAdmin(){
   const R=['user','membre','admin'];
   Q('#admin-in').innerHTML=`<div class="center"><p class="eyebrow">Administration</p><h2>Panneau admin</h2></div>
   <h3>Candidatures</h3>${(c.data||[]).map(x=>`<div class="item"><span><b>${ESC(x.nom)}</b> · ${ESC(x.email||'')} ${ESC(x.telephone||'')} <small>[${x.statut}]</small></span><span>${x.photo_path?`<button class="btn small ghost" data-ph="${ESC(x.photo_path)}">Photo</button> `:''}${x.statut==='en_attente'?`<button class="btn small" data-acc="${x.id}|${x.user_id}">Accepter</button> <button class="btn small ghost" data-ref="${x.id}">Refuser</button>`:''}</span><p>${ESC(x.message)}</p></div>`).join('')||'<p class="lead">Aucune candidature.</p>'}
-  <h3>Utilisateurs et rôles</h3>${(u.data||[]).map(x=>`<div class="item"><span>${ESC(x.nom||'')} · ${ESC(x.email)}</span><select data-role="${x.id}"${x.id===me.id?' disabled':''}>${R.map(r=>`<option${r===x.role?' selected':''}>${r}</option>`).join('')}</select></div>`).join('')}
+  <h3>Utilisateurs et rôles</h3>${(u.data||[]).map(x=>`<div class="item"><span><input class="nom-in" data-nom="${x.id}" value="${ESC(x.nom||'')}" maxlength="40" aria-label="Nom du membre"><br><small>${ESC(x.email)}</small></span><span><button class="btn small" data-savenom="${x.id}">Enregistrer le nom</button> <select data-role="${x.id}"${x.id===me.id?' disabled':''}>${R.map(r=>`<option${r===x.role?' selected':''}>${r}</option>`).join('')}</select></span></div>`).join('')}
   <p class="note" id="adm-note" role="status"></p>
   <h3>Publier une actualité</h3><form class="form" id="f-act"><label>Titre<input name="t" required></label><label>Texte<textarea name="c" rows="4" required></textarea></label><button class="btn">Publier</button></form>
   <h3>Sorties publiées</h3>${(so.data||[]).map(x=>`<div class="item"><span><b>${ESC(x.titre)}</b><br><small>📅 ${fmt(x.date_sortie)} · 📍 ${ESC(x.lieu||'à préciser')}</small></span><button class="btn small ghost" data-del="sorties:${x.id}">Supprimer</button></div>`).join('')||'<p class="lead">Aucune sortie publiée.</p>'}
@@ -725,8 +727,12 @@ document.addEventListener('change',async e=>{
   say(Q('#adm-note'),error?error.message:'Rôle modifié.',!error);
 });
 document.addEventListener('click',async e=>{
-  const t=e.target.closest('[data-auth],[data-del],[data-acc],[data-ref],[data-ph],#logout'); if(!t) return;
+  const t=e.target.closest('[data-auth],[data-del],[data-acc],[data-ref],[data-ph],[data-savenom],#logout'); if(!t) return;
   const d=t.dataset; if(d.auth){e.preventDefault();return openAuth(d.auth)}
+  if(d.savenom){const inp=document.querySelector('[data-nom="'+d.savenom+'"]'),nom=(inp.value||'').trim();
+    if(nom.length<2) return say(Q('#adm-note'),'Le nom doit faire 2 caractères minimum.');
+    const {error}=await SB.from('profiles').update({nom}).eq('id',d.savenom);
+    return say(Q('#adm-note'),error?error.message:'Nom modifié : '+nom,!error)}
   if(t.id==='logout'){await SB.auth.signOut();return refresh()}
   if(d.ph){const r=await SB.storage.from('candidatures').createSignedUrl(d.ph,300);return r.data&&window.open(r.data.signedUrl,'_blank')}
   if(d.acc){const [id,uid]=d.acc.split('|');await SB.from('candidatures').update({statut:'accepte'}).eq('id',id);
