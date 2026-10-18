@@ -393,10 +393,21 @@ footer{background:#050505;border-top:2px solid var(--red);padding:44px 0;text-al
     <label id="am-nl">Nom / pseudo<input id="am-n" autocomplete="nickname"></label>
     <label>E-mail<input id="am-e" type="email" autocomplete="email"></label>
     <label>Mot de passe (8 caractères minimum)<input id="am-p" type="password" autocomplete="current-password"></label>
-    <label id="am-cl" hidden>Code reçu par e-mail (6 chiffres)<input id="am-c" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" placeholder="123456"></label>
     <button class="btn" id="am-go"></button>
     <p class="note" id="am-note" role="status"></p>
     <button class="btn small ghost" id="am-sw" type="button"></button>
+  </div>
+</div>
+
+<div class="lightbox" id="codem" hidden>
+  <div class="form" style="width:min(420px,100%);position:relative;text-align:center">
+    <button class="lb-close" id="cm-x" aria-label="Fermer" style="font-size:34px;top:6px;right:12px">×</button>
+    <h3 class="form-title">Vérifie ton e-mail</h3>
+    <p id="cm-msg" style="text-transform:none;letter-spacing:0;font:400 15px Inter,sans-serif;color:#ddd"></p>
+    <label>Code reçu (6 chiffres)<input id="cm-c" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" style="text-align:center;font-size:26px;letter-spacing:.4em"></label>
+    <button class="btn" id="cm-go" type="button">Valider le code</button>
+    <p class="note" id="cm-note" role="status"></p>
+    <button class="btn small ghost" id="cm-re" type="button">Renvoyer le code</button>
   </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
@@ -552,7 +563,7 @@ document.getElementById('year').textContent = new Date().getFullYear();
 
 /* ===== Comptes, candidatures, espace membre, admin (Supabase) ===== */
 const SB=supabase.createClient('https://pgozpicucwdtkndkwlcs.supabase.co','sb_publishable_r-ik-kAAC8nYshqd1FuNfg_B52IxuVu');
-let me=null,prof=null,cand=null,mode='login',verifying=false;
+let me=null,prof=null,cand=null,mode='login';
 const Q=s=>document.querySelector(s);
 const ESC=t=>String(t??'').replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
 const fmt=d=>new Date(d).toLocaleString('fr-FR',{dateStyle:'full',timeStyle:'short'});
@@ -592,30 +603,35 @@ function openAuth(m){
   Q('#am-t').textContent=su?'Créer un compte':'Se connecter';
   Q('#am-nl').hidden=!su; Q('#am-go').textContent=su?'Créer mon compte':'Connexion';
   Q('#am-sw').textContent=su?'J\'ai déjà un compte':'Pas de compte ? Créer un compte';
-  verifying=false; Q('#am-cl').hidden=true; Q('#am-c').value=''; Q('#am-e').readOnly=false; Q('#am-p').parentElement.hidden=false;
-  Q('#am-note').textContent=''; Q('#am-note').className='note'; Q('#authm').hidden=false;
+  Q('#am-note').textContent=''; Q('#am-note').className='note'; Q('#codem').hidden=true; Q('#authm').hidden=false;
 }
 Q('#am-x').onclick=()=>Q('#authm').hidden=true;
-Q('#am-sw').onclick=async()=>{
-  if(!verifying) return openAuth(mode==='signup'?'login':'signup');
-  const {error}=await SB.auth.resend({type:'signup',email:Q('#am-e').value.trim()});
-  say(Q('#am-note'),error?error.message:'Nouveau code envoyé.',!error);
-};
-function startCode(email,n){
-  verifying=true; Q('#am-cl').hidden=false; Q('#am-e').readOnly=true; Q('#am-nl').hidden=true; Q('#am-p').parentElement.hidden=true;
-  Q('#am-t').textContent='Vérifie ton e-mail'; Q('#am-go').textContent='Valider le code';
-  Q('#am-sw').textContent='Renvoyer le code'; Q('#am-c').focus();
-  say(n,'Un code à 6 chiffres vient d\'être envoyé à '+email+' (vérifie les spams).',1);
+Q('#am-sw').onclick=()=>openAuth(mode==='signup'?'login':'signup');
+
+/* Pop-up du code de vérification (après "Créer mon compte") */
+let pendingEmail='';
+function openCode(email){
+  pendingEmail=email; Q('#authm').hidden=true;
+  Q('#cm-msg').textContent='Un code de vérification a été envoyé à '+email+'. Entre-le ci-dessous (pense à vérifier les spams).';
+  Q('#cm-c').value=''; Q('#cm-note').textContent=''; Q('#cm-note').className='note';
+  Q('#codem').hidden=false; setTimeout(()=>Q('#cm-c').focus(),50);
 }
+Q('#cm-x').onclick=()=>Q('#codem').hidden=true;
+Q('#cm-c').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,6)});
+Q('#cm-go').onclick=async()=>{
+  const n=Q('#cm-note'),code=Q('#cm-c').value.trim();
+  if(!/^\d{6}$/.test(code)) return say(n,'Entre les 6 chiffres du code.');
+  const {error}=await SB.auth.verifyOtp({email:pendingEmail,token:code,type:'signup'});
+  if(error) return say(n,'Code incorrect ou expiré.');
+  Q('#codem').hidden=true; refresh();
+};
+Q('#cm-re').onclick=async()=>{
+  const {error}=await SB.auth.resend({type:'signup',email:pendingEmail});
+  say(Q('#cm-note'),error?error.message:'Nouveau code envoyé.',!error);
+};
+
 Q('#am-go').onclick=async()=>{
   const n=Q('#am-note');
-  if(verifying){
-    const code=Q('#am-c').value.trim(), em=Q('#am-e').value.trim();
-    if(!/^\d{6}$/.test(code)) return say(n,'Entre les 6 chiffres du code.');
-    const {error}=await SB.auth.verifyOtp({email:em,token:code,type:'signup'});
-    if(error) return say(n,'Code incorrect ou expiré.');
-    Q('#authm').hidden=true; return refresh();
-  }
   const email=Q('#am-e').value.trim(),pw=Q('#am-p').value,nom=Q('#am-n').value.trim();
   if(!EMAIL_RE.test(email)) return say(n,'E-mail invalide.');
   if(pw.length<8) return say(n,'Mot de passe : 8 caractères minimum.');
@@ -623,7 +639,7 @@ Q('#am-go').onclick=async()=>{
     if(nom.length<2) return say(n,'Indique ton nom ou pseudo.');
     const {error}=await SB.auth.signUp({email,password:pw,options:{data:{nom}}});
     if(error) return say(n,error.message);
-    return startCode(email,n);
+    return openCode(email);
   }
   const {error}=await SB.auth.signInWithPassword({email,password:pw});
   if(error) return say(n,'E-mail ou mot de passe incorrect, ou e-mail pas encore confirmé.');
