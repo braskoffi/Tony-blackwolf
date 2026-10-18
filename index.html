@@ -703,7 +703,9 @@ document.addEventListener('submit',async e=>{
     if(f.id==='f-sor'){
       const r=await SB.from('sorties').insert({titre:v.t.value.trim(),lieu:v.l.value.trim(),description:v.c.value.trim(),date_sortie:new Date(v.d.value).toISOString()}).select().single(); if(r.error) throw r.error;
       const m=await SB.functions.invoke('smart-api',{body:{sortie_id:r.data.id}});
-      m.error?say(n,'Sortie créée, mais e-mail non envoyé : '+m.error.message):say(n,'Sortie créée, e-mail envoyé à '+m.data.sent+' membre(s).',1);}
+      if(m.error){let d=m.error.message;try{const j=await m.error.context.json();d=j.error||j.message||JSON.stringify(j)}catch(_){try{d+=' — '+await m.error.context.text()}catch(__){}}
+        say(n,'Sortie créée, mais e-mail non envoyé : '+d);}
+      else say(n,'Sortie créée, e-mail envoyé à '+m.data.sent+' membre(s).',1);}
     f.reset(); loadEspace(); loadAdmin();
   }catch(err){say(n,'Erreur : '+(err.message||err))} finally{b.disabled=false}
 });
