@@ -665,13 +665,15 @@ form.addEventListener('submit',async e=>{
 
 /* Espace membre */
 async function loadEspace(){
-  const [a,s,p]=await Promise.all([
+  const [a,s,re,p]=await Promise.all([
     SB.from('actualites').select('*').order('created_at',{ascending:false}),
     SB.from('sorties').select('*').order('date_sortie',{ascending:true}),
+    SB.from('reunions').select('*').order('date_reunion',{ascending:true}),
     SB.from('photos').select('*').order('created_at',{ascending:false})]);
   const del=(t,id)=>isAdmin()?`<button class="x" data-del="${t}:${id}" aria-label="Supprimer">×</button>`:'';
   Q('#espace-in').innerHTML=`<div class="center"><p class="eyebrow">Réservé aux membres</p><h2>Espace membre</h2></div>
   <h3>Prochaines sorties</h3>${(s.data||[]).map(x=>`<div class="item"><span><b>${ESC(x.titre)}</b><br><small>📅 ${fmt(x.date_sortie)} · 📍 ${ESC(x.lieu||'à préciser')}</small></span>${del('sorties',x.id)}<p>${ESC(x.description)}</p></div>`).join('')||'<p class="lead">Aucune sortie prévue.</p>'}
+  <h3>Prochaines réunions</h3>${(re.data||[]).map(x=>`<div class="item"><span><b>${ESC(x.titre)}</b><br><small>📅 ${fmt(x.date_reunion)} · 📍 ${ESC(x.lieu||'à préciser')}</small></span>${del('reunions',x.id)}<p>${ESC(x.description)}</p></div>`).join('')||'<p class="lead">Aucune réunion prévue.</p>'}
   <h3>Actualités</h3>${(a.data||[]).map(x=>`<div class="item"><span><b>${ESC(x.titre)}</b> <small>${new Date(x.created_at).toLocaleDateString('fr-FR')}</small></span>${del('actualites',x.id)}<p>${ESC(x.contenu)}</p></div>`).join('')||'<p class="lead">Aucune actualité.</p>'}
   <h3>Photos</h3><div class="pgrid">${(p.data||[]).map(x=>`<figure><img src="${pub(x.path)}" alt="${ESC(x.titre||'Photo du club')}" loading="lazy">${del('photos',x.id+'|'+x.path)}</figure>`).join('')||'<p class="lead">Aucune photo.</p>'}</div>`;
 }
@@ -680,7 +682,7 @@ Q('#espace').addEventListener('click',e=>{if(e.target.tagName==='IMG'){lbImg.src
 /* Admin */
 async function loadAdmin(){
   const oldNote=Q('#adm-note'),keep=oldNote?[oldNote.textContent,oldNote.className]:null;
-  const [c,u,so]=await Promise.all([SB.from('candidatures').select('*').order('created_at',{ascending:false}),SB.from('profiles').select('*').order('created_at',{ascending:false}),SB.from('sorties').select('*').order('date_sortie',{ascending:true})]);
+  const [c,u,so,ru]=await Promise.all([SB.from('candidatures').select('*').order('created_at',{ascending:false}),SB.from('profiles').select('*').order('created_at',{ascending:false}),SB.from('sorties').select('*').order('date_sortie',{ascending:true}),SB.from('reunions').select('*').order('date_reunion',{ascending:true})]);
   const R=['user','membre','admin'];
   Q('#admin-in').innerHTML=`<div class="center"><p class="eyebrow">Administration</p><h2>Panneau admin</h2></div>
   <h3>Candidatures</h3>${(c.data||[]).map(x=>`<div class="item"><span><b>${ESC(x.nom)}</b> · ${ESC(x.email||'')} ${ESC(x.telephone||'')} <small>[${x.statut}]</small></span><span>${x.photo_path?`<button class="btn small ghost" data-ph="${ESC(x.photo_path)}">Photo</button> `:''}${x.statut==='en_attente'?`<button class="btn small" data-acc="${x.id}|${x.user_id}">Accepter</button> <button class="btn small ghost" data-ref="${x.id}">Refuser</button>`:''}</span><p>${ESC(x.message)}</p></div>`).join('')||'<p class="lead">Aucune candidature.</p>'}
@@ -689,11 +691,13 @@ async function loadAdmin(){
   <h3>Publier une actualité</h3><form class="form" id="f-act"><label>Titre<input name="t" required></label><label>Texte<textarea name="c" rows="4" required></textarea></label><button class="btn">Publier</button></form>
   <h3>Sorties publiées</h3>${(so.data||[]).map(x=>`<div class="item"><span><b>${ESC(x.titre)}</b><br><small>📅 ${fmt(x.date_sortie)} · 📍 ${ESC(x.lieu||'à préciser')}</small></span><button class="btn small ghost" data-del="sorties:${x.id}">Supprimer</button></div>`).join('')||'<p class="lead">Aucune sortie publiée.</p>'}
   <h3>Prévoir une sortie</h3><form class="form" id="f-sor"><label>Titre<input name="t" required></label><label>Lieu<input name="l"></label><label>Date et heure<input type="datetime-local" name="d" required></label><label>Détails<textarea name="c" rows="3"></textarea></label><p class="hint">Un e-mail est envoyé automatiquement à tous les membres validés.</p><button class="btn">Créer et prévenir</button></form>
+  <h3>Réunions publiées</h3>${(ru.data||[]).map(x=>`<div class="item"><span><b>${ESC(x.titre)}</b><br><small>📅 ${fmt(x.date_reunion)} · 📍 ${ESC(x.lieu||'à préciser')}</small></span><button class="btn small ghost" data-del="reunions:${x.id}">Supprimer</button></div>`).join('')||'<p class="lead">Aucune réunion publiée.</p>'}
+  <h3>Prévoir une réunion</h3><form class="form" id="f-reu"><label>Titre<input name="t" required></label><label>Lieu<input name="l"></label><label>Date et heure<input type="datetime-local" name="d" required></label><label>Ordre du jour<textarea name="c" rows="3"></textarea></label><p class="hint">Un e-mail est envoyé automatiquement à tous les membres validés.</p><button class="btn">Créer et prévenir</button></form>
   <h3>Ajouter une photo</h3><form class="form" id="f-pho"><label>Titre<input name="t"></label><label>Photo<input type="file" name="f" accept="image/*" required></label><button class="btn">Envoyer</button></form>`;
   if(keep&&keep[0]){const nn=Q('#adm-note');nn.textContent=keep[0];nn.className=keep[1]}
 }
 document.addEventListener('submit',async e=>{
-  const f=e.target; if(!['f-act','f-sor','f-pho'].includes(f.id)) return; e.preventDefault();
+  const f=e.target; if(!['f-act','f-sor','f-reu','f-pho'].includes(f.id)) return; e.preventDefault();
   const n=Q('#adm-note'),v=f.elements,b=f.querySelector('button'); b.disabled=true;
   try{
     if(f.id==='f-act'){const r=await SB.from('actualites').insert({titre:v.t.value.trim(),contenu:v.c.value.trim()}); if(r.error) throw r.error; say(n,'Actualité publiée.',1);}
@@ -706,6 +710,12 @@ document.addEventListener('submit',async e=>{
       if(m.error){let d=m.error.message;try{const j=await m.error.context.json();d=j.error||j.message||JSON.stringify(j)}catch(_){try{d+=' — '+await m.error.context.text()}catch(__){}}
         say(n,'Sortie créée, mais e-mail non envoyé : '+d);}
       else say(n,'Sortie créée, e-mail envoyé à '+m.data.sent+' membre(s).',1);}
+    if(f.id==='f-reu'){
+      const r=await SB.from('reunions').insert({titre:v.t.value.trim(),lieu:v.l.value.trim(),description:v.c.value.trim(),date_reunion:new Date(v.d.value).toISOString()}).select().single(); if(r.error) throw r.error;
+      const m=await SB.functions.invoke('smart-api',{body:{reunion_id:r.data.id}});
+      if(m.error){let d=m.error.message;try{const j=await m.error.context.json();d=j.error||j.message||JSON.stringify(j)}catch(_){try{d+=' — '+await m.error.context.text()}catch(__){}}
+        say(n,'Réunion créée, mais e-mail non envoyé : '+d);}
+      else say(n,'Réunion créée, e-mail envoyé à '+m.data.sent+' membre(s).',1);}
     f.reset(); loadEspace(); loadAdmin();
   }catch(err){say(n,'Erreur : '+(err.message||err))} finally{b.disabled=false}
 });
