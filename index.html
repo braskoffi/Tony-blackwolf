@@ -679,15 +679,18 @@ Q('#espace').addEventListener('click',e=>{if(e.target.tagName==='IMG'){lbImg.src
 
 /* Admin */
 async function loadAdmin(){
-  const [c,u]=await Promise.all([SB.from('candidatures').select('*').order('created_at',{ascending:false}),SB.from('profiles').select('*').order('created_at',{ascending:false})]);
+  const oldNote=Q('#adm-note'),keep=oldNote?[oldNote.textContent,oldNote.className]:null;
+  const [c,u,so]=await Promise.all([SB.from('candidatures').select('*').order('created_at',{ascending:false}),SB.from('profiles').select('*').order('created_at',{ascending:false}),SB.from('sorties').select('*').order('date_sortie',{ascending:true})]);
   const R=['user','membre','admin'];
   Q('#admin-in').innerHTML=`<div class="center"><p class="eyebrow">Administration</p><h2>Panneau admin</h2></div>
   <h3>Candidatures</h3>${(c.data||[]).map(x=>`<div class="item"><span><b>${ESC(x.nom)}</b> · ${ESC(x.email||'')} ${ESC(x.telephone||'')} <small>[${x.statut}]</small></span><span>${x.photo_path?`<button class="btn small ghost" data-ph="${ESC(x.photo_path)}">Photo</button> `:''}${x.statut==='en_attente'?`<button class="btn small" data-acc="${x.id}|${x.user_id}">Accepter</button> <button class="btn small ghost" data-ref="${x.id}">Refuser</button>`:''}</span><p>${ESC(x.message)}</p></div>`).join('')||'<p class="lead">Aucune candidature.</p>'}
   <h3>Utilisateurs et rôles</h3>${(u.data||[]).map(x=>`<div class="item"><span>${ESC(x.nom||'')} · ${ESC(x.email)}</span><select data-role="${x.id}"${x.id===me.id?' disabled':''}>${R.map(r=>`<option${r===x.role?' selected':''}>${r}</option>`).join('')}</select></div>`).join('')}
   <p class="note" id="adm-note" role="status"></p>
   <h3>Publier une actualité</h3><form class="form" id="f-act"><label>Titre<input name="t" required></label><label>Texte<textarea name="c" rows="4" required></textarea></label><button class="btn">Publier</button></form>
+  <h3>Sorties publiées</h3>${(so.data||[]).map(x=>`<div class="item"><span><b>${ESC(x.titre)}</b><br><small>📅 ${fmt(x.date_sortie)} · 📍 ${ESC(x.lieu||'à préciser')}</small></span><button class="btn small ghost" data-del="sorties:${x.id}">Supprimer</button></div>`).join('')||'<p class="lead">Aucune sortie publiée.</p>'}
   <h3>Prévoir une sortie</h3><form class="form" id="f-sor"><label>Titre<input name="t" required></label><label>Lieu<input name="l"></label><label>Date et heure<input type="datetime-local" name="d" required></label><label>Détails<textarea name="c" rows="3"></textarea></label><p class="hint">Un e-mail est envoyé automatiquement à tous les membres validés.</p><button class="btn">Créer et prévenir</button></form>
   <h3>Ajouter une photo</h3><form class="form" id="f-pho"><label>Titre<input name="t"></label><label>Photo<input type="file" name="f" accept="image/*" required></label><button class="btn">Envoyer</button></form>`;
+  if(keep&&keep[0]){const nn=Q('#adm-note');nn.textContent=keep[0];nn.className=keep[1]}
 }
 document.addEventListener('submit',async e=>{
   const f=e.target; if(!['f-act','f-sor','f-pho'].includes(f.id)) return; e.preventDefault();
@@ -701,7 +704,7 @@ document.addEventListener('submit',async e=>{
       const r=await SB.from('sorties').insert({titre:v.t.value.trim(),lieu:v.l.value.trim(),description:v.c.value.trim(),date_sortie:new Date(v.d.value).toISOString()}).select().single(); if(r.error) throw r.error;
       const m=await SB.functions.invoke('notify-sortie',{body:{sortie_id:r.data.id}});
       m.error?say(n,'Sortie créée, mais e-mail non envoyé : '+m.error.message):say(n,'Sortie créée, e-mail envoyé à '+m.data.sent+' membre(s).',1);}
-    f.reset(); loadEspace();
+    f.reset(); loadEspace(); loadAdmin();
   }catch(err){say(n,'Erreur : '+(err.message||err))} finally{b.disabled=false}
 });
 document.addEventListener('change',async e=>{
@@ -718,7 +721,7 @@ document.addEventListener('click',async e=>{
     await SB.from('profiles').update({role:'membre'}).eq('id',uid).eq('role','user');return loadAdmin()}
   if(d.ref){await SB.from('candidatures').update({statut:'refuse'}).eq('id',d.ref);return loadAdmin()}
   if(d.del&&confirm('Supprimer ?')){const [tb,rest]=d.del.split(':'),[id,path]=rest.split('|');
-    if(path) await SB.storage.from('photos').remove([path]); await SB.from(tb).delete().eq('id',id); loadEspace()}
+    if(path) await SB.storage.from('photos').remove([path]); await SB.from(tb).delete().eq('id',id); loadEspace(); if(isAdmin()) loadAdmin()}
 });
 SB.auth.onAuthStateChange(()=>setTimeout(refresh,0));
 refresh();
