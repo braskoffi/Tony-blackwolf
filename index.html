@@ -186,6 +186,10 @@ footer{background:#050505;border-top:2px solid var(--red);padding:44px 0;text-al
 .item{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--red);border-radius:10px;padding:14px 16px;margin:10px 0;display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
 .item p{width:100%;color:var(--mute);margin:0}
 .item small{color:var(--mute)}
+#live{position:fixed;left:12px;bottom:12px;z-index:60;padding:6px 12px;border-radius:999px;font:700 12px Inter,sans-serif;letter-spacing:.04em;background:#111;border:1px solid var(--line)}
+#live.on{color:#37d67a;border-color:#37d67a}#live.off{color:#aaa}
+#toast{position:fixed;left:50%;bottom:56px;transform:translate(-50%,20px);z-index:70;background:#111;color:#fff;border:1px solid var(--red);border-radius:10px;padding:10px 16px;font:600 14px Inter,sans-serif;max-width:90vw;opacity:0;pointer-events:none;transition:.25s}
+#toast.show{opacity:1;transform:translate(-50%,0)}
 .nom-in{background:#0b0b0b;border:1px solid var(--line);border-radius:8px;color:var(--text,#f2f2f2);padding:8px 10px;font:600 15px Inter,sans-serif;min-width:150px;max-width:100%}
 .nom-in:focus{outline:2px solid var(--red);outline-offset:1px}
 #espace h3,#admin h3{font-size:26px;margin:36px 0 8px;color:var(--red2)}
@@ -412,6 +416,7 @@ footer{background:#050505;border-top:2px solid var(--red);padding:44px 0;text-al
     <button class="btn small ghost" id="cm-re" type="button">Renvoyer le code</button>
   </div>
 </div>
+<div id="live" hidden></div><div id="toast" role="status" aria-live="polite"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 
@@ -597,6 +602,8 @@ function render(){
   st.hidden=show; form.hidden=!show; st.innerHTML=msg;
   for(const [id,ok] of [['espace',isMem()],['admin',isAdmin()]]){Q('#'+id).hidden=!ok;Q('#n-'+id).hidden=!ok}
   if(isMem()) loadEspace(); if(isAdmin()) loadAdmin();
+  if(me) startLive(); else stopLive();
+  Q('#live').hidden=!(me&&isMem());
 }
 
 /* Connexion / inscription */
@@ -741,6 +748,34 @@ document.addEventListener('click',async e=>{
   if(d.del&&confirm('Supprimer ?')){const [tb,rest]=d.del.split(':'),[id,path]=rest.split('|');
     if(path) await SB.storage.from('photos').remove([path]); await SB.from(tb).delete().eq('id',id); loadEspace(); if(isAdmin()) loadAdmin()}
 });
+/* Temps réel : tout changement apparaît en direct chez tout le monde */
+let rt=null,liveOn=false,liveTimer=null;
+const LIVE_LBL={sorties:'sortie',reunions:'réunion',actualites:'actualité',photos:'photo'};
+function setLive(on){liveOn=on;const l=Q('#live');l.hidden=!(me&&isMem());l.className=on?'on':'off';l.textContent=on?'● En direct':'○ Reconnexion…'}
+function toast(t){const el=Q('#toast');el.textContent=t;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),4000)}
+function busyAdmin(){const a=document.activeElement;return !!(a&&Q('#admin-in').contains(a)&&/INPUT|TEXTAREA|SELECT/.test(a.tagName))}
+function applyLive(){
+  if(isMem()) loadEspace();
+  if(isAdmin()){ if(busyAdmin()) setTimeout(applyLive,2500); else loadAdmin(); }
+}
+function onLive(p){
+  const t=p.table;
+  if((t==='profiles'&&p.new?.id===me?.id)||(t==='candidatures'&&p.new?.user_id===me?.id)){
+    const old=prof?.role;
+    refresh().then(()=>{if(prof?.role&&prof.role!==old) toast('Ton rôle est maintenant : '+prof.role)});
+    return;
+  }
+  if(LIVE_LBL[t]) toast(p.eventType==='INSERT'?'🔔 Nouvelle '+LIVE_LBL[t]+(p.new?.titre?' : '+p.new.titre:''):'🔄 Mise à jour en direct');
+  clearTimeout(liveTimer); liveTimer=setTimeout(applyLive,400);
+}
+function startLive(){
+  if(rt||!me) return;
+  rt=SB.channel('tbw-live-'+Date.now());
+  ['actualites','sorties','reunions','photos','profiles','candidatures'].forEach(t=>rt.on('postgres_changes',{event:'*',schema:'public',table:t},onLive));
+  rt.subscribe(st=>setLive(st==='SUBSCRIBED'));
+}
+function stopLive(){if(rt){SB.removeChannel(rt);rt=null} setLive(false)}
+
 SB.auth.onAuthStateChange(()=>setTimeout(refresh,0));
 refresh();
 
